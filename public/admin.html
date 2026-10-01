@@ -1,0 +1,90 @@
+<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>LaingoPop Admin</title>
+<style>
+body{font:15px system-ui;background:#0b1020;color:#fff;margin:0;padding:16px;max-width:560px;margin:auto}
+h2{margin:0 0 12px}h3{margin:18px 0 6px;color:#94a3b8}
+input,select,button,textarea{width:100%;padding:12px;margin:4px 0;border-radius:10px;border:1px solid #334;background:#141b34;color:#fff;font:inherit;box-sizing:border-box}
+button{background:#2563eb;border:0;font-weight:700;cursor:pointer}
+button:hover{background:#1d4ed8}.danger{background:#7f1d1d}
+.r{background:#141b34;border-radius:12px;padding:10px;margin:8px 0;font-size:13px}
+.x{background:#7f1d1d;width:auto;padding:6px 12px;font-size:12px;margin:0}
+small{color:#9aa}hr{border:0;border-top:1px solid #1e2a40;margin:20px 0}
+.tabs{display:flex;gap:8px;margin-bottom:16px}
+.tab{flex:1;background:#141b34;border-radius:8px;padding:10px;text-align:center;cursor:pointer;border:2px solid transparent}
+.tab.on{border-color:#2563eb}
+</style>
+<h2>🎓 LaingoPop Admin</h2>
+<input id=key type=password placeholder="Admin key" oninput="localStorage.k=this.value">
+<div class=tabs>
+  <div class="tab on" onclick="showTab('pro',this)">Pro Activate</div>
+  <div class=tab onclick="showTab('push',this)">Push Send</div>
+  <div class=tab onclick="showTab('list',this)">Users</div>
+</div>
+
+<!-- PRO TAB -->
+<div id=tpro>
+  <input id=ref placeholder="Order ref (e.g. LP-7K3Q9)">
+  <input id=ip placeholder="IP address (optional)">
+  <select id=plan>
+    <option value=yearly>Yearly (365 days)</option>
+    <option value=monthly>Monthly (30 days)</option>
+    <option value=week>7-Day Pass</option>
+  </select>
+  <input id=days type=number min=1 placeholder="Custom days (optional)">
+  <input id=note placeholder="Note (name / WhatsApp no.)">
+  <button onclick=grant()>✅ Activate Pro</button>
+  <small id=msg></small>
+</div>
+
+<!-- PUSH TAB -->
+<div id=tpush style=display:none>
+  <input id=pref placeholder="Order ref (blank = send to ALL subscribers)">
+  <input id=ptitle placeholder="Title (e.g. LaingoPop Reminder)">
+  <textarea id=pbody rows=2 placeholder="Message body (e.g. Padhai ka waqt aa gaya!)"></textarea>
+  <button onclick=sendPush()>📨 Send Notification</button>
+  <small id=pmsg></small>
+  <p style="font-size:12px;color:#9aa">Sirf wahi users jayega jinhone notification allow ki ho aur app khola ho.</p>
+</div>
+
+<!-- LIST TAB -->
+<div id=tlist style=display:none>
+  <button onclick=load() style="background:#1e3a5f;margin-bottom:8px">🔄 Refresh</button>
+  <div id=list></div>
+</div>
+
+<script>
+const $=i=>document.getElementById(i),H=()=>({'Content-Type':'application/json','x-admin-key':$('key').value});
+$('key').value=localStorage.k||'';
+
+function showTab(name,el){
+  ['tpro','tpush','tlist'].forEach(t=>$(t).style.display='none');
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  $('t'+name).style.display='';el.classList.add('on');
+  if(name==='list')load();
+}
+
+async function grant(){
+  const r=await fetch('/api/admin/grant',{method:'POST',headers:H(),body:JSON.stringify({ref:$('ref').value,ip:$('ip').value,plan:$('plan').value,days:$('days').value,note:$('note').value})});
+  $('msg').textContent=r.ok?'✅ Done! User ko refresh karne bolo.':'❌ Error: '+(await r.text());
+  if(r.ok){$('ref').value=$('ip').value=$('note').value=$('days').value=''}
+}
+
+async function sendPush(){
+  const ref=$('pref').value,all=!ref.trim();
+  const r=await fetch('/api/admin/push',{method:'POST',headers:H(),body:JSON.stringify({ref,all,title:$('ptitle').value||'LaingoPop',body:$('pbody').value||'Padhai ka waqt!'})});
+  const j=await r.json();
+  $('pmsg').textContent=r.ok?`✅ Bheja: ${j.sent}/${j.total} users`:'❌ '+(j.error||'Error');
+}
+
+async function rev(id){if(!confirm('Pro hata dein?'))return;await fetch('/api/admin/revoke',{method:'POST',headers:H(),body:JSON.stringify({id})});load()}
+
+async function load(){
+  const r=await fetch('/api/admin/list',{headers:H()});
+  if(!r.ok){$('list').innerHTML='<small>Admin key check karo</small>';return}
+  const data=await r.json();
+  $('list').innerHTML=data.length?data.map(g=>{
+    const on=g.expiresAt>Date.now();
+    return `<div class=r><b>${g.ref||'-'}</b> · ${g.ip||'-'} · ${g.plan}<br>${on?'✅ '+new Date(g.expiresAt).toLocaleDateString('en-IN')+'  tak':'⛔ Khatam'} ${g.note?'· '+g.note:''} ${on?`<button class=x onclick="rev('${g.id}')">Remove</button>`:''}</div>`
+  }).join(''):'<small>Koi user nahi</small>';
+}
+</script>
